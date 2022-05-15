@@ -1,9 +1,11 @@
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:ungsocial/models/user_model.dart';
 import 'package:ungsocial/utility/my_constant.dart';
 import 'package:ungsocial/utility/my_dialog.dart';
 import 'package:ungsocial/widgets/show_button.dart';
@@ -147,14 +149,49 @@ class _CreateAccountState extends State<CreateAccount> {
   }
 
   Future<void> processRegister() async {
+    //Process Create New Account Firebase
+
     await FirebaseAuth.instance
         .createUserWithEmailAndPassword(email: email!, password: password!)
-        .then((value) {
+        .then((value) async {
       String uid = value.user!.uid;
       print('Regis Success uid = $uid');
 
+      // Process Upload Image to Storage
       FirebaseStorage firebaseStorage = FirebaseStorage.instance;
       Reference reference = firebaseStorage.ref().child('avatar/$uid.jpg');
+      UploadTask uploadTask = reference.putFile(file!);
+      await uploadTask.whenComplete(() async {
+        print('upload Success');
+
+        // Find url Image Upload
+        await reference.getDownloadURL().then((value) async {
+          String urlAvatar = value;
+          print('urlAvatar = $urlAvatar');
+
+          UserModel userModel = UserModel(
+              email: email!,
+              name: name!,
+              password: password!,
+              urlAvatar: urlAvatar);
+
+          await FirebaseFirestore.instance
+              .collection('user')
+              .doc(uid)
+              .set(userModel.toMap())
+              .then((value) {
+            MyDialog(context: context).twoWayAction(
+              title: 'Create Account Success',
+              subTitle: 'Welcome to My App You Can Login by Click Authen',
+              label1: 'Authen',
+              pressFunc1: () {
+                Navigator.pop(context);
+                Navigator.pop(context);
+              },
+            );
+          });
+        });
+      });
     }).catchError((value) {
       MyDialog(context: context)
           .twoWayAction(title: value.code, subTitle: value.message);
